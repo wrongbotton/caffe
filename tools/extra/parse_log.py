@@ -29,6 +29,9 @@ def parse_log(path_to_log):
     regex_train_output = re.compile('Train net output #(\d+): (\S+) = ([\.\deE+-]+)')
     regex_test_output = re.compile('Test net output #(\d+): (\S+) = ([\.\deE+-]+)')
     regex_learning_rate = re.compile('lr = ([-+]?[0-9]*\.?[0-9]+([eE]?[-+]?[0-9]+)?)')
+    regex_GPUs = re.compile('Using GPUs ([0-9|,]?)')
+    regex_stepsize = re.compile('stepsize: (\d+)')
+    regex_max_iter = re.compile('max_iter: (\d+)')
 
     # Pick out lines of interest
     iteration = -1
@@ -39,11 +42,37 @@ def parse_log(path_to_log):
     test_row = None
 
     logfile_year = extract_seconds.get_log_created_year(path_to_log)
+    GPU=-1
+    stepsize=None
+    max_iter=None
+    with open(path_to_log) as f:
+        
+        for i,line in enumerate(f):
+            output_match = regex_GPUs.search(line)
+            if output_match:
+                GPU=output_match.group(1)
+
+
+            if stepsize is None:
+                output_match = regex_stepsize.search(line)
+                if output_match:
+                    stepsize=output_match.group(1)
+
+            if max_iter is None:
+                output_match = regex_max_iter.search(line)
+                if output_match:
+                    max_iter=output_match.group(1)
+            if i>200:
+                break
+
+
+
     with open(path_to_log) as f:
         start_time = extract_seconds.get_start_time(f, logfile_year)
 
         for line in f:
             iteration_match = regex_iteration.search(line)
+
             if iteration_match:
                 iteration = float(iteration_match.group(1))
             if iteration == -1:
@@ -57,6 +86,9 @@ def parse_log(path_to_log):
             except:
                 time=-1
                 seconds=-1
+
+
+            
             
             learning_rate_match = regex_learning_rate.search(line)
             if learning_rate_match:
@@ -64,11 +96,15 @@ def parse_log(path_to_log):
 
             train_dict_list, train_row = parse_line_for_net_output(
                 regex_train_output, train_row, train_dict_list,
-                line, iteration, seconds, learning_rate
+                line, iteration, seconds, learning_rate,
+                gpu=GPU,time=time,
+                stepsize=stepsize,max_iter=max_iter,
             )
             test_dict_list, test_row = parse_line_for_net_output(
                 regex_test_output, test_row, test_dict_list,
-                line, iteration, seconds, learning_rate
+                line, iteration, seconds, learning_rate,
+                gpu=GPU,time=time,
+                stepsize=stepsize,max_iter=max_iter,
             )
 
     fix_initial_nan_learning_rate(train_dict_list)
@@ -78,7 +114,7 @@ def parse_log(path_to_log):
 
 
 def parse_line_for_net_output(regex_obj, row, row_dict_list,
-                              line, iteration, seconds, learning_rate):
+                              line, iteration, seconds, learning_rate,gpu=-1,stepsize=None,max_iter=None,time=None):
     """Parse a single line for training or test output
 
     Returns a a tuple with (row_dict_list, row)
@@ -101,7 +137,11 @@ def parse_line_for_net_output(regex_obj, row, row_dict_list,
             row = OrderedDict([
                 ('NumIters', iteration),
                 ('Seconds', seconds),
-                ('LearningRate', learning_rate)
+                ('LearningRate', learning_rate),
+                ('GPU', gpu),
+                ('Time',time),
+                ('MaxIter',max_iter),
+                ('StepSize',stepsize),
             ])
 
         # output_num is not used; may be used in the future
